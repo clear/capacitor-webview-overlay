@@ -55,7 +55,7 @@ class WebviewOverlay: UIViewController, WKUIDelegate, WKNavigationDelegate {
         button.imageEdgeInsets = UIEdgeInsets(top: 10, left: 10, bottom: 10, right: 10)
         button.adjustsImageWhenHighlighted = false
         button.layer.cornerRadius = 0.5 * button.bounds.size.width
-        button.addTarget(self, action: #selector(buttonAction), for: .touchUpInside)
+        // button.addTarget(self, action: #selector(buttonAction), for: .touchUpInside)
 
         let blur = UIVisualEffectView(effect: UIBlurEffect(style: UIBlurEffect.Style.regular))
         blur.frame = button.bounds
@@ -76,9 +76,9 @@ class WebviewOverlay: UIViewController, WKUIDelegate, WKNavigationDelegate {
         self.closeFullscreenButton.frame = CGRect(x: UIScreen.main.bounds.width - 60, y: self.topSafeArea + 20, width: 40, height: 40)
     }
 
-    @objc func buttonAction(sender: UIButton!) {
-        plugin.toggleFullscreen()
-    }
+    // @objc func buttonAction(sender: UIButton!) {
+    //     plugin.toggleFullscreen()
+    // }
 
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         currentUrl = webView.url
@@ -191,7 +191,7 @@ public class WebviewOverlayPlugin: CAPPlugin {
 
     var fullscreen: Bool = false
 
-    var webviewOverlay: WebviewOverlay!
+    var overlays: [String: WebviewOverlay] = [:]
 
     /**
      * Capacitor Plugin load
@@ -200,6 +200,9 @@ public class WebviewOverlayPlugin: CAPPlugin {
 
     @objc func open(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
+            // Generate an ID to refer to this browser context as
+            let browser_uuid = NSUUID().uuidString
+
             let webConfiguration = WKWebViewConfiguration()
             webConfiguration.allowsInlineMediaPlayback = true
             webConfiguration.mediaTypesRequiringUserActionForPlayback = []
@@ -209,24 +212,30 @@ public class WebviewOverlayPlugin: CAPPlugin {
             let javascript = call.getString("javascript") ?? ""
             if (javascript != "") {
                 var injectionTime: WKUserScriptInjectionTime!
-                switch(call.getInt("injectionTime")){
-                case 0:
-                    injectionTime = .atDocumentStart
-                    break;
-                case 1:
-                    injectionTime = .atDocumentEnd
-                    break;
-                default:
-                    injectionTime = .atDocumentStart
-                    break;
+
+                switch(call.getInt("injectionTime")) {
+                    case 0:
+                        injectionTime = .atDocumentStart
+                        break;
+                    case 1:
+                        injectionTime = .atDocumentEnd
+                        break;
+                    default:
+                        injectionTime = .atDocumentStart
+                        break;
                 }
+
                 let contentController = WKUserContentController()
                 let script = WKUserScript(source: String(javascript), injectionTime: injectionTime, forMainFrameOnly: true)
                 contentController.addUserScript(script)
                 webConfiguration.userContentController = contentController
             }
 
-            self.webviewOverlay = WebviewOverlay(self, configuration: webConfiguration)
+            // Create the overlay
+            let overlay = WebviewOverlay(self, configuration: webConfiguration)
+
+            // Save it to the dictionary
+            self.overlays[browser_uuid] = overlay
 
             guard let urlString = call.getString("url") else {
                 call.reject("Must provide a URL to open")
@@ -242,36 +251,63 @@ public class WebviewOverlayPlugin: CAPPlugin {
             self.x = CGFloat(call.getFloat("x") ?? 0)
             self.y = CGFloat(call.getFloat("y") ?? 0)
 
-            self.webviewOverlay.view.isHidden = true
-            self.bridge?.viewController?.addChild(self.webviewOverlay)
-            self.bridge?.viewController?.view.addSubview(self.webviewOverlay.view)
-            self.webviewOverlay.view.frame = CGRect(x: self.x, y: self.y, width: self.width, height: self.height)
-            self.webviewOverlay.didMove(toParent: self.bridge?.viewController)
+            overlay.view.isHidden = true
+            self.bridge?.viewController?.addChild(overlay)
+            self.bridge?.viewController?.view.addSubview(overlay.view)
+            overlay.view.frame = CGRect(x: self.x, y: self.y, width: self.width, height: self.height)
+            overlay.didMove(toParent: self.bridge?.viewController)
 
-            self.webviewOverlay.loadUrl(url!)
+            overlay.loadUrl(url!)
+
+            // Send the ID back to the caller
+            call.resolve([
+                "id": browser_uuid
+            ])
         }
     }
 
     @objc func close(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
-            if (self.webviewOverlay != nil) {
-                self.webviewOverlay.view.removeFromSuperview()
-                self.webviewOverlay.removeFromParent()
-                self.webviewOverlay.clearWebServer()
-                self.webviewOverlay = nil
-                self.hidden = false
+            guard let browser_uuid = call.getString("id") else {
+                call.reject("Must provide a browser id")
+                return
             }
+
+            guard let overlay = self.overlays[browser_uuid] else {
+                call.reject("Can't find browser matching id")
+                return
+            }
+
+            overlay.view.removeFromSuperview()
+            overlay.removeFromParent()
+            overlay.clearWebServer()
+
+            self.overlays.removeValue(forKey: browser_uuid)
+
+            self.hidden = false
+
+            call.resolve()
         }
     }
 
     @objc func getSnapshot(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
-            if (self.webviewOverlay != nil) {
-                if (self.webviewOverlay.webview != nil) {
-                    let offset: CGPoint = (self.webviewOverlay.webview?.scrollView.contentOffset)!
-                    self.webviewOverlay.webview?.scrollView.setContentOffset(offset, animated: false)
+            guard let browser_uuid = call.getString("id") else {
+                call.reject("Must provide a browser id")
+                return
+            }
 
-                    self.webviewOverlay.webview?.takeSnapshot(with: nil) {image, error in
+            guard let overlay = self.overlays[browser_uuid] else {
+                call.reject("Can't find browser matching id")
+                return
+            }
+
+            if (overlay != nil) {
+                if (overlay.webview != nil) {
+                    let offset: CGPoint = (overlay.webview?.scrollView.contentOffset)!
+                    overlay.webview?.scrollView.setContentOffset(offset, animated: false)
+
+                    overlay.webview?.takeSnapshot(with: nil) {image, error in
                         if let image = image {
                             guard let jpeg = image.jpegData(compressionQuality: 1) else {
                                 return
@@ -295,38 +331,60 @@ public class WebviewOverlayPlugin: CAPPlugin {
 
     @objc func updateDimensions(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
-            self.width = CGFloat(call.getFloat("width") ?? 0)
-            self.height = CGFloat(call.getFloat("height") ?? 0)
-            self.x = CGFloat(call.getFloat("x") ?? 0)
-            self.y = CGFloat(call.getFloat("y") ?? 0)
+            guard let browser_uuid = call.getString("id") else {
+                call.reject("Must provide a browser id")
+                return
+            }
+
+            guard let overlay = self.overlays[browser_uuid] else {
+                call.reject("Can't find browser matching id")
+                return
+            }
+
+            let dimensions = call.getObject("dimensions") ?? [:]
+            self.width = CGFloat(dimensions["width"] as? Float ?? 0)
+            self.height = CGFloat(dimensions["height"] as? Float ?? 0)
+            self.x = CGFloat(dimensions["x"] as? Float ?? 0)
+            self.y = CGFloat(dimensions["y"] as? Float ?? 0)
 
             if (!self.fullscreen) {
                 let rect = CGRect(x: self.x, y: self.y, width: self.width, height: self.height)
-                self.webviewOverlay.view.frame = rect
+                overlay.view.frame = rect
             }
             else {
                 let width = UIScreen.main.bounds.width
                 let height = UIScreen.main.bounds.height
                 let rect = CGRect(x: 0, y: 0, width: width, height: height)
-                self.webviewOverlay.view.frame = rect
+                overlay.view.frame = rect
             }
 
-            if (self.webviewOverlay.topSafeArea != nil && self.webviewOverlay.closeFullscreenButton != nil) {
-                self.webviewOverlay.closeFullscreenButton.frame = CGRect(x: UIScreen.main.bounds.width - 60, y: self.webviewOverlay.topSafeArea + 20, width: 40, height: 40)
+            if (overlay.topSafeArea != nil && overlay.closeFullscreenButton != nil) {
+                overlay.closeFullscreenButton.frame = CGRect(x: UIScreen.main.bounds.width - 60, y: overlay.topSafeArea + 20, width: 40, height: 40)
             }
             
             if (self.hidden) {
                 self.notifyListeners("updateSnapshot", data: [:])
             }
+
             call.resolve()
         }
     }
 
     @objc func show(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
+            guard let browser_uuid = call.getString("id") else {
+                call.reject("Must provide a browser id")
+                return
+            }
+
+            guard let overlay = self.overlays[browser_uuid] else {
+                call.reject("Can't find browser matching id")
+                return
+            }
+
             self.hidden = false
-            if (self.webviewOverlay != nil) {
-                self.webviewOverlay.view.isHidden = false
+            if (overlay != nil) {
+                overlay.view.isHidden = false
             }
             call.resolve()
         }
@@ -334,9 +392,19 @@ public class WebviewOverlayPlugin: CAPPlugin {
 
     @objc func hide(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
+            guard let browser_uuid = call.getString("id") else {
+                call.reject("Must provide a browser id")
+                return
+            }
+
+            guard let overlay = self.overlays[browser_uuid] else {
+                call.reject("Can't find browser matching id")
+                return
+            }
+
             self.hidden = true
-            if (self.webviewOverlay != nil) {
-                self.webviewOverlay.view.isHidden = true
+            if (overlay != nil) {
+                overlay.view.isHidden = true
             }
             call.resolve()
         }
@@ -344,14 +412,24 @@ public class WebviewOverlayPlugin: CAPPlugin {
 
     @objc func evaluateJavaScript(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
+            guard let browser_uuid = call.getString("id") else {
+                call.reject("Must provide a browser id")
+                return
+            }
+
+            guard let overlay = self.overlays[browser_uuid] else {
+                call.reject("Can't find browser matching id")
+                return
+            }
+
             guard let javascript = call.getString("javascript") else {
                 call.reject("Must provide javascript string")
                 return
             }
-            if (self.webviewOverlay != nil) {
-                if (self.webviewOverlay.webview != nil) {
+            if (overlay != nil) {
+                if (overlay.webview != nil) {
                     func eval(completionHandler: @escaping (_ response: String?) -> Void) {
-                        self.webviewOverlay.webview?.evaluateJavaScript(String(javascript)) { (value, error) in
+                        overlay.webview?.evaluateJavaScript(String(javascript)) { (value, error) in
                             if error != nil {
                                 call.reject(error?.localizedDescription ?? "unknown error")
                             }
@@ -375,25 +453,35 @@ public class WebviewOverlayPlugin: CAPPlugin {
         }
     }
 
-    @objc func toggleFullscreen(_ call: CAPPluginCall? = nil) {
+    @objc func toggleFullscreen(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
-            if (self.webviewOverlay != nil) {
+            guard let browser_uuid = call.getString("id") else {
+                call.reject("Must provide a browser id")
+                return
+            }
+
+            guard let overlay = self.overlays[browser_uuid] else {
+                call.reject("Can't find browser matching id")
+                return
+            }
+
+            if (overlay != nil) {
                 if (self.fullscreen) {
                     let rect = CGRect(x: self.x, y: self.y, width: self.width, height: self.height)
-                    self.webviewOverlay.view.frame = rect
+                    overlay.view.frame = rect
                     self.fullscreen = false
-                    self.webviewOverlay.closeFullscreenButton.isHidden = true
+                    overlay.closeFullscreenButton.isHidden = true
                 }
                 else {
                     let width = UIScreen.main.bounds.width
                     let height = UIScreen.main.bounds.height
                     let rect = CGRect(x: 0, y: 0, width: width, height: height)
-                    self.webviewOverlay.view.frame = rect
+                    overlay.view.frame = rect
                     self.fullscreen = true
-                    self.webviewOverlay.closeFullscreenButton.isHidden = false
+                    overlay.closeFullscreenButton.isHidden = false
                 }
                 if (call != nil) {
-                    call!.resolve()
+                    call.resolve()
                 }
             }
         }
@@ -401,8 +489,18 @@ public class WebviewOverlayPlugin: CAPPlugin {
 
     @objc func goBack(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
-            if (self.webviewOverlay != nil) {
-                self.webviewOverlay.webview?.goBack()
+            guard let browser_uuid = call.getString("id") else {
+                call.reject("Must provide a browser id")
+                return
+            }
+
+            guard let overlay = self.overlays[browser_uuid] else {
+                call.reject("Can't find browser matching id")
+                return
+            }
+
+            if (overlay != nil) {
+                overlay.webview?.goBack()
                 call.resolve()
             }
         }
@@ -410,8 +508,18 @@ public class WebviewOverlayPlugin: CAPPlugin {
 
     @objc func goForward(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
-            if (self.webviewOverlay != nil) {
-                self.webviewOverlay.webview?.goForward()
+            guard let browser_uuid = call.getString("id") else {
+                call.reject("Must provide a browser id")
+                return
+            }
+
+            guard let overlay = self.overlays[browser_uuid] else {
+                call.reject("Can't find browser matching id")
+                return
+            }
+
+            if (overlay != nil) {
+                overlay.webview?.goForward()
                 call.resolve()
             }
         }
@@ -419,8 +527,18 @@ public class WebviewOverlayPlugin: CAPPlugin {
 
     @objc func reload(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
-            if (self.webviewOverlay != nil) {
-                self.webviewOverlay.webview?.reload()
+            guard let browser_uuid = call.getString("id") else {
+                call.reject("Must provide a browser id")
+                return
+            }
+
+            guard let overlay = self.overlays[browser_uuid] else {
+                call.reject("Can't find browser matching id")
+                return
+            }
+
+            if (overlay != nil) {
+                overlay.webview?.reload()
                 call.resolve()
             }
         }
@@ -428,24 +546,44 @@ public class WebviewOverlayPlugin: CAPPlugin {
 
     @objc func loadUrl(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
-            if (self.webviewOverlay != nil) {
+            guard let browser_uuid = call.getString("id") else {
+                call.reject("Must provide a browser id")
+                return
+            }
+
+            guard let overlay = self.overlays[browser_uuid] else {
+                call.reject("Can't find browser matching id")
+                return
+            }
+
+            if (overlay != nil) {
                 let url = call.getString("url") ?? ""
-                self.webviewOverlay.loadUrlCall = call
-                self.webviewOverlay.loadUrl(URL(string: url)!)
+                overlay.loadUrlCall = call
+                overlay.loadUrl(URL(string: url)!)
             }
         }
     }
 
     @objc func handleNavigationEvent(_ call: CAPPluginCall) {
-        if (self.webviewOverlay != nil && self.webviewOverlay.currentDecisionHandler != nil) {
+        guard let browser_uuid = call.getString("id") else {
+            call.reject("Must provide a browser id")
+            return
+        }
+
+        guard let overlay = self.overlays[browser_uuid] else {
+            call.reject("Can't find browser matching id")
+            return
+        }
+
+        if (overlay != nil && overlay.currentDecisionHandler != nil) {
             if (call.getBool("allow") ?? true) {
-                self.webviewOverlay.currentDecisionHandler!(.allow)
+                overlay.currentDecisionHandler!(.allow)
             }
             else {
-                self.webviewOverlay.currentDecisionHandler!(.cancel)
+                overlay.currentDecisionHandler!(.cancel)
                 self.notifyListeners("pageLoaded", data: [:])
             }
-            self.webviewOverlay.currentDecisionHandler = nil
+            overlay.currentDecisionHandler = nil
             call.resolve()
         }
     }

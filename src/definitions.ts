@@ -4,36 +4,36 @@ export interface IWebviewOverlayPlugin {
     /**
      * Open a webview with the given URL
      */
-    open(options: OpenOptions): Promise<void>;
+    open(options: OpenOptions): Promise<{ id: string }>;
 
     /**
      * Close an open webview.
      */
-    close(): Promise<void>;
+    close(options: { id: string }): Promise<void>;
 
     /**
      * Load a url in the webview.
      */
-    loadUrl(options: {url: string}): Promise<void>;
+    loadUrl(options: { id: string, url: string }): Promise<void>;
 
     /**
      * Get snapshot image
      */
-    getSnapshot(): Promise<{src: string}>;
+    getSnapshot(options: { id: string }): Promise<{ src: string }>;
 
-    show(): Promise<void>;
-    hide(): Promise<void>;
+    show(options: { id: string }): Promise<void>;
+    hide(options: { id: string }): Promise<void>;
 
-    toggleFullscreen(): Promise<void>;
-    goBack(): Promise<void>;
-    goForward(): Promise<void>;
-    reload(): Promise<void>;
+    toggleFullscreen(options: { id: string }): Promise<void>;
+    goBack(options: { id: string }): Promise<void>;
+    goForward(options: { id: string }): Promise<void>;
+    reload(options: { id: string }): Promise<void>;
     
-    handleNavigationEvent(options: {allow: boolean}): Promise<void>;
+    handleNavigationEvent(options: { id: string, allow: boolean }): Promise<void>;
 
-    updateDimensions(options: Dimensions): Promise<void>;
+    updateDimensions(options: { id: string, dimensions: Dimensions }): Promise<void>;
 
-    evaluateJavaScript(options: {javascript: string}): Promise<{result: string}>;
+    evaluateJavaScript(options: { id: string, javascript: string }): Promise<{result: string}>;
 
     addListener(eventName: 'pageLoaded' | 'updateSnapshot' | 'progress' | 'navigationHandler', listenerFunc: (...args: any[]) => void): PluginListenerHandle;
 }
