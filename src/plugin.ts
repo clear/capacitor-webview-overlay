@@ -14,7 +14,7 @@ export interface WebviewOverlayOpenOptions {
     script?: {
         javascript: string;
         injectionTime?: ScriptInjectionTime;
-    }
+    };
 }
 
 export class WebviewOverlay {
@@ -26,9 +26,7 @@ export class WebviewOverlay {
 
     private id: string | null = null;
 
-    constructor(private element: HTMLElement) {
-
-    }
+    constructor(private element: HTMLElement) { }
 
     async init(options: WebviewOverlayOpenOptions): Promise<void> {
         if (this.element && this.element.style) {
@@ -42,18 +40,22 @@ export class WebviewOverlay {
         let overlay = await WebviewOverlayPlugin.open({
             url: options.url,
             javascript: options.script ? options.script.javascript : '',
-            injectionTime: options.script ? (options.script.injectionTime || ScriptInjectionTime.atDocumentStart) : ScriptInjectionTime.atDocumentStart,
+            injectionTime: options.script
+                ? options.script.injectionTime || ScriptInjectionTime.atDocumentStart
+                : ScriptInjectionTime.atDocumentStart,
             width: Math.round(boundingBox.width),
             height: Math.round(boundingBox.height),
             x: Math.round(boundingBox.x),
-            y: Math.round(boundingBox.y)
+            y: Math.round(boundingBox.y),
         });
         this.id = overlay.id;
 
-        this.updateSnapshotEvent = WebviewOverlayPlugin.addListener('updateSnapshot', () => {
-            setTimeout(() => {
-                this.toggleSnapshot(true);
-            }, 100)
+        this.updateSnapshotEvent = WebviewOverlayPlugin.addListener('updateSnapshot', (e) => {
+            if (e.id === this.id) {
+                setTimeout(() => {
+                    this.toggleSnapshot(true);
+                }, 100);
+            }
         });
 
         this.resizeObserver = new ResizeObserver((entries) => {
@@ -65,8 +67,8 @@ export class WebviewOverlay {
                         width: Math.round(boundingBox.width),
                         height: Math.round(boundingBox.height),
                         x: Math.round(boundingBox.x),
-                        y: Math.round(boundingBox.y)
-                    }
+                        y: Math.round(boundingBox.y),
+                    },
                 });
             }
         });
@@ -103,19 +105,17 @@ export class WebviewOverlay {
                         setTimeout(async () => {
                             await WebviewOverlayPlugin.hide({ id: this.id });
                             resolve();
-                        }, 25)
+                        }, 25);
                     };
                     img.src = blobUrl;
-                }
-                else {
+                } else {
                     if (this.element && this.element.style) {
                         this.element.style.backgroundImage = `none`;
                     }
                     await WebviewOverlayPlugin.hide({ id: this.id });
                     resolve();
                 }
-            }
-            else {
+            } else {
                 if (this.element && this.element.style) {
                     this.element.style.backgroundImage = `none`;
                 }
@@ -126,31 +126,47 @@ export class WebviewOverlay {
     }
 
     async evaluateJavaScript(javascript: string): Promise<string> {
-        return (await WebviewOverlayPlugin.evaluateJavaScript({
-            id: this.id,
-            javascript
-        })).result;
+        return (
+            await WebviewOverlayPlugin.evaluateJavaScript({
+                id: this.id,
+                javascript,
+            })
+        ).result;
     }
 
-    // TODO: Listen for matching ID
     onPageLoaded(listenerFunc: () => void) {
-        this.pageLoadedEvent = WebviewOverlayPlugin.addListener('pageLoaded', listenerFunc);
+        this.pageLoadedEvent = WebviewOverlayPlugin.addListener('pageLoaded', (e) => {
+            if (e.id === this.id) {
+                listenerFunc();
+            }
+        });
     }
     onProgress(listenerFunc: (progress: { value: number }) => void) {
-        this.progressEvent = WebviewOverlayPlugin.addListener('progress', listenerFunc);
+        this.progressEvent = WebviewOverlayPlugin.addListener('progress', (e) => {
+            if (e.id === this.id) {
+                listenerFunc(e);
+            }
+        });
     }
 
-    handleNavigation(listenerFunc: (event: {
-        url: string,
-        newWindow: boolean,
-        sameHost: boolean,
-        complete: (allow: boolean) => void
-    }) => void) {
+    handleNavigation(
+        listenerFunc: (event: {
+            url: string;
+            newWindow: boolean;
+            sameHost: boolean;
+            complete: (allow: boolean) => void;
+        }) => void
+    ) {
         this.navigationHandlerEvent = WebviewOverlayPlugin.addListener('navigationHandler', (event: any) => {
-            const complete = (allow: boolean) => {
-                WebviewOverlayPlugin.handleNavigationEvent({ id: this.id, allow });
+            if (event.id === this.id) {
+                console.log('activated');
+                const complete = (allow: boolean) => {
+                    WebviewOverlayPlugin.handleNavigationEvent({ id: this.id, allow });
+                };
+                listenerFunc({ ...event, complete });
+            } else {
+                console.log('skipped');
             }
-            listenerFunc({ ...event, complete });
         });
     }
 
@@ -173,6 +189,4 @@ export class WebviewOverlay {
     loadUrl(url: string) {
         return WebviewOverlayPlugin.loadUrl({ id: this.id, url });
     }
-
 }
-

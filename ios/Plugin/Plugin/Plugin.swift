@@ -4,7 +4,7 @@ import GCDWebServer
 
 @available(iOS 11.0, *)
 class WebviewOverlay: UIViewController, WKUIDelegate, WKNavigationDelegate {
-
+    var id: String?
     var webview: WKWebView?
     var plugin: WebviewOverlayPlugin!
     var configuration: WKWebViewConfiguration!
@@ -22,10 +22,11 @@ class WebviewOverlay: UIViewController, WKUIDelegate, WKNavigationDelegate {
 
     var loadUrlCall: CAPPluginCall?
 
-    init(_ plugin: WebviewOverlayPlugin, configuration: WKWebViewConfiguration) {
+    init(_ plugin: WebviewOverlayPlugin, configuration: WKWebViewConfiguration, id: String) {
         super.init(nibName: "WebviewOverlay", bundle: nil)
         self.plugin = plugin
         self.configuration = configuration
+        self.id = id
     }
 
     deinit {
@@ -47,7 +48,7 @@ class WebviewOverlay: UIViewController, WKUIDelegate, WKNavigationDelegate {
         self.webview?.scrollView.bounces = false
         self.webview?.allowsBackForwardNavigationGestures = true
 
-        self.webview?.isOpaque = false
+        // self.webview?.isOpaque = false
 
         let button = UIButton(frame: CGRect(x: UIScreen.main.bounds.width - 60, y: 20, width: 40, height: 40))
         let image = UIImage(named: "icon", in: Bundle(for: NSClassFromString("WebviewOverlayPlugin")!), compatibleWith: nil)
@@ -85,13 +86,13 @@ class WebviewOverlay: UIViewController, WKUIDelegate, WKNavigationDelegate {
         currentUrl = webView.url
         view.isHidden = plugin.hidden
         if (plugin.hidden) {
-            plugin.notifyListeners("updateSnapshot", data: [:])
+            self.notify("updateSnapshot", data: [:])
         }
         if (self.loadUrlCall != nil) {
             self.loadUrlCall?.resolve()
             self.loadUrlCall = nil
         }
-        plugin.notifyListeners("pageLoaded", data: [:])
+        self.notify("pageLoaded", data: [:])
 
         // Remove tap highlight
         let script = "function addStyleString(str) {" +
@@ -130,7 +131,7 @@ class WebviewOverlay: UIViewController, WKUIDelegate, WKNavigationDelegate {
         }
         if (plugin.hasListeners("navigationHandler")) {
             self.currentDecisionHandler = decisionHandler
-            plugin.notifyListeners("navigationHandler", data: [
+            self.notify("navigationHandler", data: [
                 "url": navigationResponse.response.url?.absoluteString ?? "",
                 "newWindow": self.openNewWindow,
                 "sameHost": currentUrl?.host == navigationResponse.response.url?.host
@@ -173,10 +174,18 @@ class WebviewOverlay: UIViewController, WKUIDelegate, WKNavigationDelegate {
 
     override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey : Any]?, context: UnsafeMutableRawPointer?) {
         if (keyPath == "estimatedProgress") {
-            plugin.notifyListeners("progress", data: ["value":self.webview?.estimatedProgress ?? 1])
+            self.notify("progress", data: ["value":self.webview?.estimatedProgress ?? 1])
         }
     }
 
+    public func notify(_ eventName: String, data: [String : Any]?) {
+        // Add ID to event data
+        var idData = data ?? [:]
+        idData["id"] = self.id
+        
+        // Propagate event
+        self.plugin.notifyListeners(eventName, data: idData)
+    }
 }
 
 @available(iOS 11.0, *)
@@ -233,7 +242,7 @@ public class WebviewOverlayPlugin: CAPPlugin {
             }
 
             // Create the overlay
-            let overlay = WebviewOverlay(self, configuration: webConfiguration)
+            let overlay = WebviewOverlay(self, configuration: webConfiguration, id: browser_uuid)
 
             // Save it to the dictionary
             self.overlays[browser_uuid] = overlay
@@ -364,7 +373,7 @@ public class WebviewOverlayPlugin: CAPPlugin {
             }
             
             if (self.hidden) {
-                self.notifyListeners("updateSnapshot", data: [:])
+                overlay.notify("updateSnapshot", data: [:])
             }
 
             call.resolve()
@@ -576,13 +585,13 @@ public class WebviewOverlayPlugin: CAPPlugin {
             return
         }
 
-        if (overlay != nil && overlay.currentDecisionHandler != nil) {
+        if (overlay.currentDecisionHandler != nil) {
             if (call.getBool("allow") ?? true) {
                 overlay.currentDecisionHandler!(.allow)
             }
             else {
                 overlay.currentDecisionHandler!(.cancel)
-                self.notifyListeners("pageLoaded", data: [:])
+                overlay.notify("pageLoaded", data: [:])
             }
             overlay.currentDecisionHandler = nil
             call.resolve()
