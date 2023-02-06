@@ -15,26 +15,22 @@ export interface WebviewOverlayOpenOptions {
         javascript: string;
         injectionTime?: ScriptInjectionTime;
     }
-
-    /**
-     * The element to open the webview in place of. The webview will open with the same dimensions and fixed position on screen.
-     * When toggled off, the element will have a background image with the webview snapshot.
-     */
-    element: HTMLElement;
 }
 
-class WebviewOverlayClass {
+export class WebviewOverlay {
+    private updateSnapshotEvent: PluginListenerHandle;
+    private pageLoadedEvent: PluginListenerHandle;
+    private progressEvent: PluginListenerHandle;
+    private navigationHandlerEvent: PluginListenerHandle;
+    private resizeObserver: ResizeObserver;
 
-    element: HTMLElement;
-    updateSnapshotEvent: PluginListenerHandle;
-    pageLoadedEvent: PluginListenerHandle;
-    progressEvent: PluginListenerHandle;
-    navigationHandlerEvent: PluginListenerHandle;
-    resizeObserver: ResizeObserver;
+    private id: string | null = null;
 
-    async open(options: WebviewOverlayOpenOptions): Promise<string> {
-        this.element = options.element;
+    constructor(private element: HTMLElement) {
 
+    }
+
+    async init(options: WebviewOverlayOpenOptions): Promise<void> {
         if (this.element && this.element.style) {
             this.element.style.backgroundSize = 'cover';
             this.element.style.backgroundRepeat = 'no-repeat';
@@ -52,16 +48,17 @@ class WebviewOverlayClass {
             x: Math.round(boundingBox.x),
             y: Math.round(boundingBox.y)
         });
+        this.id = overlay.id;
 
         this.updateSnapshotEvent = WebviewOverlayPlugin.addListener('updateSnapshot', () => {
             setTimeout(() => {
-                this.toggleSnapshot(overlay.id, true);
+                this.toggleSnapshot(true);
             }, 100)
         });
 
         this.resizeObserver = new ResizeObserver((entries) => {
             for (const _entry of entries) {
-                const boundingBox = options.element.getBoundingClientRect() as DOMRect;
+                const boundingBox = this.element.getBoundingClientRect() as DOMRect;
                 WebviewOverlayPlugin.updateDimensions({
                     id: overlay.id,
                     dimensions: {
@@ -75,31 +72,24 @@ class WebviewOverlayClass {
         });
 
         this.resizeObserver.observe(this.element);
-
-        return overlay.id;
     }
 
-    close(id: string): Promise<void> {
-        this.element = undefined;
+    close(): Promise<void> {
+        this.element = null;
+
         this.resizeObserver.disconnect();
-        if (this.updateSnapshotEvent) {
-            this.updateSnapshotEvent.remove();
-        }
-        if (this.pageLoadedEvent) {
-            this.pageLoadedEvent.remove();
-        }
-        if (this.progressEvent) {
-            this.progressEvent.remove();
-        }
-        if (this.navigationHandlerEvent) {
-            this.navigationHandlerEvent.remove();
-        }
-        return WebviewOverlayPlugin.close({ id });
+
+        this.updateSnapshotEvent?.remove();
+        this.pageLoadedEvent?.remove();
+        this.progressEvent?.remove();
+        this.navigationHandlerEvent?.remove();
+
+        return WebviewOverlayPlugin.close({ id: this.id });
     }
 
-    async toggleSnapshot(id: string, snapshotVisible: boolean): Promise<void> {
+    async toggleSnapshot(snapshotVisible: boolean): Promise<void> {
         return new Promise<void>(async (resolve) => {
-            const snapshot = (await WebviewOverlayPlugin.getSnapshot({ id })).src;
+            const snapshot = (await WebviewOverlayPlugin.getSnapshot({ id: this.id })).src;
             if (snapshotVisible) {
                 if (snapshot) {
                     const buffer = await (await fetch('data:image/jpeg;base64,' + snapshot)).arrayBuffer();
@@ -111,7 +101,7 @@ class WebviewOverlayClass {
                             this.element.style.backgroundImage = `url(${blobUrl})`;
                         }
                         setTimeout(async () => {
-                            await WebviewOverlayPlugin.hide({ id });
+                            await WebviewOverlayPlugin.hide({ id: this.id });
                             resolve();
                         }, 25)
                     };
@@ -121,7 +111,7 @@ class WebviewOverlayClass {
                     if (this.element && this.element.style) {
                         this.element.style.backgroundImage = `none`;
                     }
-                    await WebviewOverlayPlugin.hide({ id });
+                    await WebviewOverlayPlugin.hide({ id: this.id });
                     resolve();
                 }
             }
@@ -129,28 +119,28 @@ class WebviewOverlayClass {
                 if (this.element && this.element.style) {
                     this.element.style.backgroundImage = `none`;
                 }
-                await WebviewOverlayPlugin.show({ id });
+                await WebviewOverlayPlugin.show({ id: this.id });
                 resolve();
             }
         });
     }
 
-    async evaluateJavaScript(id: string, javascript: string): Promise<string> {
+    async evaluateJavaScript(javascript: string): Promise<string> {
         return (await WebviewOverlayPlugin.evaluateJavaScript({
-            id,
+            id: this.id,
             javascript
         })).result;
     }
 
+    // TODO: Listen for matching ID
     onPageLoaded(listenerFunc: () => void) {
         this.pageLoadedEvent = WebviewOverlayPlugin.addListener('pageLoaded', listenerFunc);
     }
-
     onProgress(listenerFunc: (progress: { value: number }) => void) {
         this.progressEvent = WebviewOverlayPlugin.addListener('progress', listenerFunc);
     }
 
-    handleNavigation(id: string, listenerFunc: (event: {
+    handleNavigation(listenerFunc: (event: {
         url: string,
         newWindow: boolean,
         sameHost: boolean,
@@ -158,32 +148,31 @@ class WebviewOverlayClass {
     }) => void) {
         this.navigationHandlerEvent = WebviewOverlayPlugin.addListener('navigationHandler', (event: any) => {
             const complete = (allow: boolean) => {
-                WebviewOverlayPlugin.handleNavigationEvent({ id, allow });
+                WebviewOverlayPlugin.handleNavigationEvent({ id: this.id, allow });
             }
             listenerFunc({ ...event, complete });
         });
     }
 
-    toggleFullscreen(id: string) {
-        WebviewOverlayPlugin.toggleFullscreen({ id });
+    toggleFullscreen() {
+        WebviewOverlayPlugin.toggleFullscreen({ id: this.id });
     }
 
-    goBack(id: string) {
-        WebviewOverlayPlugin.goBack({ id });
+    goBack() {
+        WebviewOverlayPlugin.goBack({ id: this.id });
     }
 
-    goForward(id: string) {
-        WebviewOverlayPlugin.goForward({ id });
+    goForward() {
+        WebviewOverlayPlugin.goForward({ id: this.id });
     }
 
-    reload(id: string) {
-        WebviewOverlayPlugin.reload({ id });
+    reload() {
+        WebviewOverlayPlugin.reload({ id: this.id });
     }
 
-    loadUrl(id: string, url: string) {
-        return WebviewOverlayPlugin.loadUrl({ id, url });
+    loadUrl(url: string) {
+        return WebviewOverlayPlugin.loadUrl({ id: this.id, url });
     }
 
 }
 
-export const WebviewOverlay = new WebviewOverlayClass();

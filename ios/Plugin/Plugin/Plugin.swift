@@ -29,6 +29,7 @@ class WebviewOverlay: UIViewController, WKUIDelegate, WKNavigationDelegate {
     }
 
     deinit {
+        self.clearDecisionHandler()
         self.webview?.removeObserver(self, forKeyPath: #keyPath(WKWebView.estimatedProgress))
     }
 
@@ -251,7 +252,7 @@ public class WebviewOverlayPlugin: CAPPlugin {
             self.x = CGFloat(call.getFloat("x") ?? 0)
             self.y = CGFloat(call.getFloat("y") ?? 0)
 
-            overlay.view.isHidden = true
+            overlay.view.isHidden = false
             self.bridge?.viewController?.addChild(overlay)
             self.bridge?.viewController?.view.addSubview(overlay.view)
             overlay.view.frame = CGRect(x: self.x, y: self.y, width: self.width, height: self.height)
