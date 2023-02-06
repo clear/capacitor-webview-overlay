@@ -159,13 +159,10 @@ export class WebviewOverlay {
     ) {
         this.navigationHandlerEvent = WebviewOverlayPlugin.addListener('navigationHandler', (event: any) => {
             if (event.id === this.id) {
-                console.log('activated');
                 const complete = (allow: boolean) => {
                     WebviewOverlayPlugin.handleNavigationEvent({ id: this.id, allow });
                 };
                 listenerFunc({ ...event, complete });
-            } else {
-                console.log('skipped');
             }
         });
     }
