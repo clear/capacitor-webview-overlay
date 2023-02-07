@@ -1,22 +1,19 @@
-import { Component } from '@angular/core';
-import { Platform } from '@ionic/angular';
-import { Plugins } from '@capacitor/core';
-const { SplashScreen } = Plugins;
+import { Component, ElementRef, ViewChild } from '@angular/core';
+import { WebviewOverlay } from '@clear/capacitor-webview-overlay';
 
 @Component({
-    selector: 'app-root',
-    templateUrl: 'app.component.html'
+  selector: 'app-root',
+  templateUrl: './app.component.html',
+  styleUrls: ['./app.component.css']
 })
 export class AppComponent {
-    constructor(
-        private platform: Platform,
-    ) {
-        this.initializeApp();
-    }
+  title = 'example';
 
-    initializeApp() {
-        if (this.platform.is('capacitor')) {
-            SplashScreen.hide();
-        }
-    }
+  @ViewChild("view")
+  view?: ElementRef;
+
+  handleClick() {
+      let overlay = new WebviewOverlay(this.view?.nativeElement);
+      overlay.init({ url: "https://google.com" });
+  }
 }
