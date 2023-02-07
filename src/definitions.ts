@@ -35,7 +35,7 @@ export interface IWebviewOverlayPlugin {
 
     evaluateJavaScript(options: { id: string, javascript: string }): Promise<{result: string}>;
 
-    addListener(eventName: 'pageLoaded' | 'updateSnapshot' | 'progress' | 'navigationHandler', listenerFunc: (...args: any[]) => void): PluginListenerHandle;
+    addListener(eventName: 'pageLoaded' | 'updateSnapshot' | 'progress' | string, listenerFunc: (...args: any[]) => void): PluginListenerHandle;
 }
 
 interface OpenOptions extends Dimensions {

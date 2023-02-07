@@ -129,9 +129,11 @@ class WebviewOverlay: UIViewController, WKUIDelegate, WKNavigationDelegate {
         if (self.currentDecisionHandler != nil) {
             self.clearDecisionHandler()
         }
-        if (plugin.hasListeners("navigationHandler")) {
+
+        let event_name = "navigationHandler_\(self.id!)"
+        if (plugin.hasListeners(event_name)) {
             self.currentDecisionHandler = decisionHandler
-            self.notify("navigationHandler", data: [
+            self.notify(event_name, data: [
                 "url": navigationResponse.response.url?.absoluteString ?? "",
                 "newWindow": self.openNewWindow,
                 "sameHost": currentUrl?.host == navigationResponse.response.url?.host

@@ -26,6 +26,8 @@ export class WebviewOverlay {
 
     private id: string | null = null;
 
+    private preinitialised_navigation_event: ((any) => void) | null = null;
+
     constructor(private element: HTMLElement) { }
 
     async init(options: WebviewOverlayOpenOptions): Promise<void> {
@@ -49,6 +51,11 @@ export class WebviewOverlay {
             y: Math.round(boundingBox.y),
         });
         this.id = overlay.id;
+
+        if (this.preinitialised_navigation_event !== null) {
+            this.navigationHandlerEvent = WebviewOverlayPlugin.addListener(`navigationHandler_${this.id}`, this.preinitialised_navigation_event);
+            this.preinitialised_navigation_event = null;
+        }
 
         this.updateSnapshotEvent = WebviewOverlayPlugin.addListener('updateSnapshot', (e) => {
             if (e.id === this.id) {
@@ -157,14 +164,20 @@ export class WebviewOverlay {
             complete: (allow: boolean) => void;
         }) => void
     ) {
-        this.navigationHandlerEvent = WebviewOverlayPlugin.addListener('navigationHandler', (event: any) => {
+        function event_handler(event: any) {
             if (event.id === this.id) {
                 const complete = (allow: boolean) => {
                     WebviewOverlayPlugin.handleNavigationEvent({ id: this.id, allow });
                 };
                 listenerFunc({ ...event, complete });
             }
-        });
+        }
+
+        if (this.id !== null) {
+            this.navigationHandlerEvent = WebviewOverlayPlugin.addListener(`navigationHandler_${this.id}`, event_handler.bind(this));
+        } else {
+            this.preinitialised_navigation_event = event_handler.bind(this);
+        }
     }
 
     toggleFullscreen() {
