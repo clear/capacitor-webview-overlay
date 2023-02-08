@@ -131,7 +131,7 @@ class WebviewOverlay: UIViewController, WKUIDelegate, WKNavigationDelegate {
         }
 
         let event_name = "navigationHandler_\(self.id!)"
-        if (plugin.hasListeners(event_name)) {
+        if (navigationResponse.isForMainFrame && plugin.hasListeners(event_name)) {
             self.currentDecisionHandler = decisionHandler
             self.notify(event_name, data: [
                 "url": navigationResponse.response.url?.absoluteString ?? "",
