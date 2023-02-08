@@ -7,13 +7,42 @@ import { WebviewOverlay } from '@clear/capacitor-webview-overlay';
   styleUrls: ['./app.component.css']
 })
 export class AppComponent {
-  title = 'example';
-
   @ViewChild("view")
   view?: ElementRef;
 
-  handleClick() {
+  overlays: WebviewOverlay[] = [];
+
+  newViewButton() {
+      this.openOverlay("https://google.com");
+  }
+
+  openOverlay(url: string) {
       let overlay = new WebviewOverlay(this.view?.nativeElement);
-      overlay.init({ url: "https://google.com" });
+      overlay.init({ url });
+
+      overlay.onPageLoaded(() => {
+          console.log("Page loaded!");
+
+          overlay.handleNavigation((e) => {
+              console.log("Attempting to navigate to", e.url);
+
+              let allow = confirm("Allow navigation to " + e.url);
+              e.complete(allow);
+
+              if (!allow) {
+                  this.openOverlay(e.url);
+              }
+          })
+      })
+
+      this.overlays.push(overlay);
+  }
+
+  doneButton() {
+      let overlay = this.overlays.pop();
+
+      if (overlay) {
+          overlay.close();
+      }
   }
 }

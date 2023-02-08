@@ -1,5 +1,40 @@
-<div #view>
-    hello :)
-    
-    <button (click)="handleClick()">click me</button>
+<div id="container">
+    <div id="top_bar">
+        <button (click)="doneButton()">Done</button>
+        <div class="grow"></div>
+        <button (click)="newViewButton()">+</button>
+    </div>
+    <div id="view" #view>
+        <p>View div</p>
+    </div>
 </div>
+
+<style>
+    #container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+
+        display: grid;
+        grid-template-rows: auto 1fr;
+    }
+
+    #top_bar {
+        width: 100%;
+        height: fit-content;
+
+        display: flex;
+        flex-direction: row;
+
+        box-sizing: border-box;
+        background: cyan;
+        padding: 10px;
+        padding-top: calc(env(safe-area-inset-top) + 10px);
+    }
+
+    #top_bar > .grow {
+        flex-grow: 1;
+    }
+</style>
