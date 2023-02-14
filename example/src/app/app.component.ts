@@ -11,6 +11,7 @@ export class AppComponent {
   view?: ElementRef;
 
   overlays: WebviewOverlay[] = [];
+  intervals: number[] = [];
 
   newViewButton() {
       this.openOverlay("https://google.com");
@@ -23,7 +24,7 @@ export class AppComponent {
       overlay.onPageLoaded(() => {
           console.log("Page loaded!");
 
-          overlay.handleNavigation((e) => {
+          overlay.handleNavigation((e: any) => {
               console.log("Attempting to navigate to", e.url);
 
               let allow = confirm("Allow navigation to " + e.url);
@@ -33,6 +34,9 @@ export class AppComponent {
                   this.openOverlay(e.url);
               }
           })
+
+          let interval = setInterval(async () => console.log(await overlay.evaluateJavaScript("document.title")), 1000) as unknown as number;
+          this.intervals.push(interval);
       })
 
       this.overlays.push(overlay);
@@ -40,6 +44,8 @@ export class AppComponent {
 
   doneButton() {
       let overlay = this.overlays.pop();
+      let interval = this.intervals.pop();
+      clearInterval(interval);
 
       if (overlay) {
           overlay.close();

@@ -2,7 +2,7 @@ PODS:
   - Capacitor (4.6.3):
     - CapacitorCordova
   - CapacitorCordova (4.6.3)
-  - ClearCapacitorWebviewOverlay (2.0.2):
+  - ClearCapacitorWebviewOverlay (3.0.0):
     - Capacitor
     - GCDWebServer
   - GCDWebServer (3.5.4):
@@ -29,7 +29,7 @@ EXTERNAL SOURCES:
 SPEC CHECKSUMS:
   Capacitor: 744b9eea76ac615076a15f1eb2a754f155012e54
   CapacitorCordova: 4c146609d8f3a3ce164ed0996761759c65cc6402
-  ClearCapacitorWebviewOverlay: 364c1593a0569e230291c63fa691244bbd9c960c
+  ClearCapacitorWebviewOverlay: 79d45301f2d386dd290d89bcc3497551e22359d1
   GCDWebServer: 2c156a56c8226e2d5c0c3f208a3621ccffbe3ce4
 
 PODFILE CHECKSUM: 8c7d8e33742f18e12b8dbdebd27708c34ce29f95
