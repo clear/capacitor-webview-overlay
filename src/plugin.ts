@@ -133,12 +133,17 @@ export class WebviewOverlay {
     }
 
     async evaluateJavaScript(javascript: string): Promise<string> {
-        return (
+        let result = (
             await WebviewOverlayPlugin.evaluateJavaScript({
                 id: this.id,
                 javascript,
             })
         ).result;
+
+        // Unwrap string from quotes
+        result = result.match(/^"?(.+?)"?$/)[1];
+
+        return result;
     }
 
     onPageLoaded(listenerFunc: () => void) {
