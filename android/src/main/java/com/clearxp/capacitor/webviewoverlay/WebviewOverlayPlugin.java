@@ -271,6 +271,8 @@ public class WebviewOverlayPlugin extends Plugin {
                     rootGroup.removeView(webView);
                 }
                 hidden = false;
+
+                webView.destroy();
             }
             call.resolve();
         });
