@@ -141,7 +141,7 @@ export class WebviewOverlay {
         ).result;
 
         // Unwrap string from quotes
-        result = result.match(/^"?(.+?)"?$/)[1];
+        result = (result || '').match(/^"?(.*?)"?$/)[1];
 
         return result;
     }
