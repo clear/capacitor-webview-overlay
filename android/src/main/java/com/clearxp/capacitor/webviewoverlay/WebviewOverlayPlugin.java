@@ -1,12 +1,18 @@
 package com.clearxp.capacitor.webviewoverlay;
 import android.annotation.SuppressLint;
+import android.app.Activity;
+import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.os.Message;
+import android.net.Uri;
+import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.MimeTypeMap;
+import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
+import android.webkit.WebChromeClient.FileChooserParams;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -71,6 +77,13 @@ public class WebviewOverlayPlugin extends Plugin {
     private PluginCall loadUrlCall;
 
     private MyHTTPD server;
+
+    private ValueCallback<Uri[]> filePathCallback;
+
+    private static final String TAG = "CxpWebviewOverlayPlugin";
+
+    // Arbitrary unique code
+    private static final int FILE_CHOOSER_REQUEST_CODE = 51426;
 
     @Override
     public void load() {
@@ -141,6 +154,30 @@ public class WebviewOverlayPlugin extends Plugin {
                     return true;
                 }
 
+                @Override
+                public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback, FileChooserParams fileChooserParams) {
+                    Log.d(TAG, "onShowFileChooser triggered");
+
+                    if (WebviewOverlayPlugin.this.filePathCallback != null) {
+                        Log.w(TAG, "Previous filePathCallback not cleared, cancelling it");
+                        WebviewOverlayPlugin.this.filePathCallback.onReceiveValue(null);
+                        WebviewOverlayPlugin.this.filePathCallback = null;
+                    }
+
+                    WebviewOverlayPlugin.this.filePathCallback = filePathCallback;
+
+                    try {
+                        Intent intent = fileChooserParams.createIntent();
+                        bridge.getActivity().startActivityForResult(intent, FILE_CHOOSER_REQUEST_CODE);
+                        Log.d(TAG, "File chooser intent started");
+                    } catch (Exception e) {
+                        Log.e(TAG, "Error starting file chooser intent", e);
+                        WebviewOverlayPlugin.this.filePathCallback = null;
+                        return false;
+                    }
+
+                    return true;
+                }
             });
 
             webView.setWebViewClient(new WebViewClient() {
@@ -227,6 +264,30 @@ public class WebviewOverlayPlugin extends Plugin {
             ret.put("id", browser_uuid);
             call.resolve(ret);
         });
+    }
+
+    @Override
+    protected void handleOnActivityResult(int requestCode, int resultCode, Intent intent) {
+        Log.d(TAG, "handleOnActivityResult called: resultCode = " + resultCode);
+        
+        if (requestCode != FILE_CHOOSER_REQUEST_CODE) return;
+
+        if (filePathCallback == null) {
+            Log.w(TAG, "filePathCallback was null in onActivityResult");
+            return;
+        }
+
+        Uri[] results = null;
+
+        if (resultCode == Activity.RESULT_OK && intent != null) {
+            results = WebChromeClient.FileChooserParams.parseResult(resultCode, intent);
+            Log.d(TAG, "File chooser result received: " + (results != null ? results.length : 0));
+        } else {
+            Log.d(TAG, "User cancelled file chooser");
+        }
+
+        filePathCallback.onReceiveValue(results); // Always call, even if null
+        filePathCallback = null;
     }
 
     private void handleNavigation(String browser_uuid, String url, Boolean newWindow) {
