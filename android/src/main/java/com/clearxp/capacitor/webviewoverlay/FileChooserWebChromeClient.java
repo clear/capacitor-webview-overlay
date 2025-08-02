@@ -2,6 +2,7 @@ package com.clearxp.capacitor.webviewoverlay;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.content.pm.ResolveInfo;
 import android.net.Uri;
 import android.os.Environment;
 import android.provider.MediaStore;
@@ -10,10 +11,13 @@ import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebView;
 
+import androidx.core.content.FileProvider;
+
 import java.io.File;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.List;
 
 /**
  * A custom WebChromeClient designed to handle file chooser requests from a WebView.
@@ -50,8 +54,13 @@ public class FileChooserWebChromeClient extends WebChromeClient {
 
         String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
         String imageFileName = "JPEG_" + timeStamp + "_";
+
         // Use the app's private external files directory for better compatibility with Scoped Storage.
         File storageDir = activity.getExternalFilesDir(Environment.DIRECTORY_PICTURES);
+        if (storageDir != null && !storageDir.exists()) {
+            storageDir.mkdirs();
+        }
+
         File imageFile = File.createTempFile(imageFileName, ".jpg", storageDir);
         mCameraPhotoPath = imageFile.getAbsolutePath();
         return imageFile;
@@ -85,8 +94,22 @@ public class FileChooserWebChromeClient extends WebChromeClient {
             }
 
             if (photoFile != null) {
-                Uri photoURI = Uri.fromFile(photoFile);
+                Uri photoURI = FileProvider.getUriForFile(
+                        activity,
+                        activity.getPackageName() + ".fileprovider",
+                        photoFile
+                );
+
                 takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, photoURI);
+                takePictureIntent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+                // Grant permission to all camera apps that can handle this intent
+                List<ResolveInfo> resInfoList = activity.getPackageManager().queryIntentActivities(takePictureIntent, 0);
+
+                for (ResolveInfo resolveInfo : resInfoList) {
+                    String packageName = resolveInfo.activityInfo.packageName;
+                    activity.grantUriPermission(packageName, photoURI, Intent.FLAG_GRANT_WRITE_URI_PERMISSION |  Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                }
             } else {
                 takePictureIntent = null;
             }
