@@ -41,7 +41,7 @@ public class FileChooserWebChromeClient extends WebChromeClient {
     public FileChooserWebChromeClient(Activity activity) {
         this.activity = activity;
 
-        Log.w(TAG, "Creating FileChooserWebChromeClient");
+        Log.d(TAG, "Creating FileChooserWebChromeClient");
     }
 
     /**
@@ -50,7 +50,7 @@ public class FileChooserWebChromeClient extends WebChromeClient {
      * @throws IOException If the file could not be created.
      */
     private File createImageFile() throws IOException {
-        Log.w(TAG, "createImageFile");
+        Log.d(TAG, "createImageFile");
 
         String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
         String imageFileName = "JPEG_" + timeStamp + "_";
@@ -71,7 +71,7 @@ public class FileChooserWebChromeClient extends WebChromeClient {
      */
     @Override
     public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback, FileChooserParams fileChooserParams) {
-        Log.w(TAG, "onShowFileChooser");
+        Log.d(TAG, "onShowFileChooser");
 
         // If there's already a callback, cancel it to avoid issues.[3]
         if (mFilePathCallback != null) {
@@ -84,7 +84,7 @@ public class FileChooserWebChromeClient extends WebChromeClient {
         // Create an intent to launch the camera
         Intent takePictureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
         if (takePictureIntent.resolveActivity(activity.getPackageManager())!= null) {
-            Log.w(TAG, "onShowFileChooser - take picture");
+            Log.d(TAG, "onShowFileChooser - take picture");
 
             File photoFile = null;
             try {
@@ -128,7 +128,7 @@ public class FileChooserWebChromeClient extends WebChromeClient {
             intentArray = new Intent[]{};
         }
 
-        Log.w(TAG, "onShowFileChooser - choose intent");
+        Log.d(TAG, "onShowFileChooser - choose intent");
 
         // The main chooser intent that wraps the file picker
         Intent chooserIntent = new Intent(Intent.ACTION_CHOOSER);
