@@ -1,18 +1,13 @@
 package com.clearxp.capacitor.webviewoverlay;
 import android.annotation.SuppressLint;
-import android.app.Activity;
-import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.os.Message;
-import android.net.Uri;
 import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.MimeTypeMap;
-import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
-import android.webkit.WebChromeClient.FileChooserParams;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -34,6 +29,8 @@ import java.util.UUID;
 import android.util.Base64;
 
 import fi.iki.elonen.NanoHTTPD;
+
+import com.clearxp.capacitor.webviewoverlay.FileChooserWebChromeClient;
 
 class MyHTTPD extends NanoHTTPD {
     public static final int PORT = 8080;
@@ -69,7 +66,7 @@ public class WebviewOverlayPlugin extends Plugin {
     private int height;
     private float x;
     private float y;
-    
+
     private HashMap<String, WebView> webviews = new HashMap();
 
     private String targetUrl;
@@ -77,13 +74,6 @@ public class WebviewOverlayPlugin extends Plugin {
     private PluginCall loadUrlCall;
 
     private MyHTTPD server;
-
-    private ValueCallback<Uri[]> filePathCallback;
-
-    private static final String TAG = "CxpWebviewOverlayPlugin";
-
-    // Arbitrary unique code
-    private static final int FILE_CHOOSER_REQUEST_CODE = 51426;
 
     @Override
     public void load() {
@@ -103,7 +93,7 @@ public class WebviewOverlayPlugin extends Plugin {
             String browser_uuid = UUID.randomUUID().toString();
             WebView webView = new WebView(getContext());
             WebviewOverlayPlugin.this.webviews.put(browser_uuid, webView);
-            
+
             WebSettings settings = webView.getSettings();
             settings.setAllowContentAccess(true);
             settings.setAllowFileAccess(true);
@@ -121,7 +111,7 @@ public class WebviewOverlayPlugin extends Plugin {
 
             final int injectionTime = call.getInt("injectionTime", 0);
 
-            webView.setWebChromeClient(new WebChromeClient() {
+            webView.setWebChromeClient(new FileChooserWebChromeClient(getActivity()) {
                 @Override
                 public void onProgressChanged(WebView view, int progress) {
                     JSObject progressValue = new JSObject();
@@ -153,31 +143,6 @@ public class WebviewOverlayPlugin extends Plugin {
                     resultMsg.sendToTarget();
                     return true;
                 }
-
-                @Override
-                public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback, FileChooserParams fileChooserParams) {
-                    Log.d(TAG, "onShowFileChooser triggered");
-
-                    if (WebviewOverlayPlugin.this.filePathCallback != null) {
-                        Log.w(TAG, "Previous filePathCallback not cleared, cancelling it");
-                        WebviewOverlayPlugin.this.filePathCallback.onReceiveValue(null);
-                        WebviewOverlayPlugin.this.filePathCallback = null;
-                    }
-
-                    WebviewOverlayPlugin.this.filePathCallback = filePathCallback;
-
-                    try {
-                        Intent intent = fileChooserParams.createIntent();
-                        bridge.getActivity().startActivityForResult(intent, FILE_CHOOSER_REQUEST_CODE);
-                        Log.d(TAG, "File chooser intent started");
-                    } catch (Exception e) {
-                        Log.e(TAG, "Error starting file chooser intent", e);
-                        WebviewOverlayPlugin.this.filePathCallback = null;
-                        return false;
-                    }
-
-                    return true;
-                }
             });
 
             webView.setWebViewClient(new WebViewClient() {
@@ -193,7 +158,7 @@ public class WebviewOverlayPlugin extends Plugin {
                 @Override
                 public void onPageFinished(WebView view, String url) {
                     super.onPageFinished(view, url);
-                    
+
                     if (!javascript.isEmpty() && injectionTime == 1) {
                         webView.evaluateJavascript(javascript, null);
                     }
@@ -232,12 +197,12 @@ public class WebviewOverlayPlugin extends Plugin {
                 call.reject("Must provide a URL to open");
                 return;
             }
-            
+
             width = (int) getPixels(call.getInt("width", 1));
             height = (int) getPixels(call.getInt("height", 1));
             x = getPixels(call.getInt("x", 0));
             y = getPixels(call.getInt("y", 0));
-            
+
             ViewGroup.LayoutParams params = new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
             webView.setLayoutParams(params);
             params.width = width;
@@ -259,43 +224,19 @@ public class WebviewOverlayPlugin extends Plugin {
             else {
                 webView.loadUrl(urlString);
             }
-            
+
             JSObject ret = new JSObject();
             ret.put("id", browser_uuid);
             call.resolve(ret);
         });
     }
 
-    @Override
-    protected void handleOnActivityResult(int requestCode, int resultCode, Intent intent) {
-        Log.d(TAG, "handleOnActivityResult called: resultCode = " + resultCode);
-        
-        if (requestCode != FILE_CHOOSER_REQUEST_CODE) return;
-
-        if (filePathCallback == null) {
-            Log.w(TAG, "filePathCallback was null in onActivityResult");
-            return;
-        }
-
-        Uri[] results = null;
-
-        if (resultCode == Activity.RESULT_OK && intent != null) {
-            results = WebChromeClient.FileChooserParams.parseResult(resultCode, intent);
-            Log.d(TAG, "File chooser result received: " + (results != null ? results.length : 0));
-        } else {
-            Log.d(TAG, "User cancelled file chooser");
-        }
-
-        filePathCallback.onReceiveValue(results); // Always call, even if null
-        filePathCallback = null;
-    }
-
     private void handleNavigation(String browser_uuid, String url, Boolean newWindow) {
         targetUrl = url;
         boolean sameHost;
-        
+
         WebView webView = this.webviews.get(browser_uuid);
-        
+
         try {
             URL currentUrl = new URL(webView.getUrl());
             URL targetUrl = new URL(url);
@@ -319,13 +260,13 @@ public class WebviewOverlayPlugin extends Plugin {
                 call.reject("Must provide a browser id");
                 return;
             }
-            
+
             WebView webView = WebviewOverlayPlugin.this.webviews.remove(browser_uuid);
             if (webView != null) {
                 if (server != null && server.isAlive()) {
                     server.stop();
                 }
-                
+
                 ViewGroup rootGroup = ((ViewGroup) getBridge().getWebView().getParent());
                 int count = rootGroup.getChildCount();
                 if (count > 1) {
@@ -347,9 +288,9 @@ public class WebviewOverlayPlugin extends Plugin {
                 call.reject("Must provide a browser id");
                 return;
             }
-            
+
             hidden = false;
-            
+
             WebView webView = WebviewOverlayPlugin.this.webviews.get(browser_uuid);
             if (webView != null) {
                 webView.setVisibility(View.VISIBLE);
@@ -366,9 +307,9 @@ public class WebviewOverlayPlugin extends Plugin {
                 call.reject("Must provide a browser id");
                 return;
             }
-            
+
             hidden = true;
-            
+
             WebView webView = WebviewOverlayPlugin.this.webviews.get(browser_uuid);
             if (webView != null) {
                 webView.setVisibility(View.INVISIBLE);
@@ -385,18 +326,18 @@ public class WebviewOverlayPlugin extends Plugin {
                 call.reject("Must provide a browser id");
                 return;
             }
-            
+
             JSObject dimensions_object = call.getObject("dimensions");
             if (dimensions_object == null) {
                 call.reject("Must pass dimensions object");
                 return;
             }
-            
+
             width = (int) getPixels(dimensions_object.getInteger("width", 1));
             height = (int) getPixels(dimensions_object.getInteger("height", 1));
             x = getPixels(dimensions_object.getInteger("x", 0));
             y = getPixels(dimensions_object.getInteger("y", 0));
-            
+
             WebView webView = WebviewOverlayPlugin.this.webviews.get(browser_uuid);
             if (webView == null) {
                 call.reject("Can't find browser matching id");
@@ -422,7 +363,7 @@ public class WebviewOverlayPlugin extends Plugin {
             if (hidden) {
                 WebviewOverlayPlugin.this.notify("updateSnapshot", new JSObject(), browser_uuid);
             }
-            
+
             call.resolve();
         });
     }
@@ -435,9 +376,9 @@ public class WebviewOverlayPlugin extends Plugin {
                 call.reject("Must provide a browser id");
                 return;
             }
-            
+
             WebView webView = WebviewOverlayPlugin.this.webviews.get(browser_uuid);
-            
+
             final JSObject object = new JSObject();
             if (webView != null) {
                 Bitmap bm = Bitmap.createBitmap(width == 0 ? 1 : width, height == 0 ? 1 : height, Bitmap.Config.ARGB_8888);
@@ -463,13 +404,13 @@ public class WebviewOverlayPlugin extends Plugin {
             call.reject("Must provide javascript string");
             return;
         }
-        
+
         String browser_uuid = call.getString("id");
         if (browser_uuid == null) {
             call.reject("Must provide a browser id");
             return;
         }
-        
+
         WebView webView = this.webviews.get(browser_uuid);
 
         if (webView != null) {
@@ -491,7 +432,7 @@ public class WebviewOverlayPlugin extends Plugin {
                 call.reject("Must provide a browser id");
                 return;
             }
-            
+
             WebView webView = WebviewOverlayPlugin.this.webviews.get(browser_uuid);
             if (webView != null) {
                 ViewGroup.LayoutParams params = webView.getLayoutParams();
@@ -512,7 +453,7 @@ public class WebviewOverlayPlugin extends Plugin {
                     fullscreen = true;
                 }
             }
-            
+
             call.resolve();
         });
     }
@@ -525,7 +466,7 @@ public class WebviewOverlayPlugin extends Plugin {
                 call.reject("Must provide a browser id");
                 return;
             }
-            
+
             WebView webView = WebviewOverlayPlugin.this.webviews.get(browser_uuid);
             if (webView != null) {
                 webView.goBack();
@@ -607,7 +548,7 @@ public class WebviewOverlayPlugin extends Plugin {
             call.resolve();
         });
     }
-    
+
     public void notify(String eventName, JSObject data, String browser_uuid) {
         data.put("id", browser_uuid);
         notifyListeners(eventName, data);
