@@ -3,6 +3,7 @@ import android.annotation.SuppressLint;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.os.Message;
+import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.MimeTypeMap;
@@ -28,6 +29,8 @@ import java.util.UUID;
 import android.util.Base64;
 
 import fi.iki.elonen.NanoHTTPD;
+
+import com.clearxp.capacitor.webviewoverlay.FileChooserWebChromeClient;
 
 class MyHTTPD extends NanoHTTPD {
     public static final int PORT = 8080;
@@ -63,7 +66,7 @@ public class WebviewOverlayPlugin extends Plugin {
     private int height;
     private float x;
     private float y;
-    
+
     private HashMap<String, WebView> webviews = new HashMap();
 
     private String targetUrl;
@@ -90,7 +93,7 @@ public class WebviewOverlayPlugin extends Plugin {
             String browser_uuid = UUID.randomUUID().toString();
             WebView webView = new WebView(getContext());
             WebviewOverlayPlugin.this.webviews.put(browser_uuid, webView);
-            
+
             WebSettings settings = webView.getSettings();
             settings.setAllowContentAccess(true);
             settings.setAllowFileAccess(true);
@@ -108,7 +111,7 @@ public class WebviewOverlayPlugin extends Plugin {
 
             final int injectionTime = call.getInt("injectionTime", 0);
 
-            webView.setWebChromeClient(new WebChromeClient() {
+            webView.setWebChromeClient(new FileChooserWebChromeClient(getActivity()) {
                 @Override
                 public void onProgressChanged(WebView view, int progress) {
                     JSObject progressValue = new JSObject();
@@ -140,7 +143,6 @@ public class WebviewOverlayPlugin extends Plugin {
                     resultMsg.sendToTarget();
                     return true;
                 }
-
             });
 
             webView.setWebViewClient(new WebViewClient() {
@@ -156,7 +158,7 @@ public class WebviewOverlayPlugin extends Plugin {
                 @Override
                 public void onPageFinished(WebView view, String url) {
                     super.onPageFinished(view, url);
-                    
+
                     if (!javascript.isEmpty() && injectionTime == 1) {
                         webView.evaluateJavascript(javascript, null);
                     }
@@ -195,12 +197,12 @@ public class WebviewOverlayPlugin extends Plugin {
                 call.reject("Must provide a URL to open");
                 return;
             }
-            
+
             width = (int) getPixels(call.getInt("width", 1));
             height = (int) getPixels(call.getInt("height", 1));
             x = getPixels(call.getInt("x", 0));
             y = getPixels(call.getInt("y", 0));
-            
+
             ViewGroup.LayoutParams params = new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
             webView.setLayoutParams(params);
             params.width = width;
@@ -222,7 +224,7 @@ public class WebviewOverlayPlugin extends Plugin {
             else {
                 webView.loadUrl(urlString);
             }
-            
+
             JSObject ret = new JSObject();
             ret.put("id", browser_uuid);
             call.resolve(ret);
@@ -232,9 +234,9 @@ public class WebviewOverlayPlugin extends Plugin {
     private void handleNavigation(String browser_uuid, String url, Boolean newWindow) {
         targetUrl = url;
         boolean sameHost;
-        
+
         WebView webView = this.webviews.get(browser_uuid);
-        
+
         try {
             URL currentUrl = new URL(webView.getUrl());
             URL targetUrl = new URL(url);
@@ -258,13 +260,13 @@ public class WebviewOverlayPlugin extends Plugin {
                 call.reject("Must provide a browser id");
                 return;
             }
-            
+
             WebView webView = WebviewOverlayPlugin.this.webviews.remove(browser_uuid);
             if (webView != null) {
                 if (server != null && server.isAlive()) {
                     server.stop();
                 }
-                
+
                 ViewGroup rootGroup = ((ViewGroup) getBridge().getWebView().getParent());
                 int count = rootGroup.getChildCount();
                 if (count > 1) {
@@ -286,9 +288,9 @@ public class WebviewOverlayPlugin extends Plugin {
                 call.reject("Must provide a browser id");
                 return;
             }
-            
+
             hidden = false;
-            
+
             WebView webView = WebviewOverlayPlugin.this.webviews.get(browser_uuid);
             if (webView != null) {
                 webView.setVisibility(View.VISIBLE);
@@ -305,9 +307,9 @@ public class WebviewOverlayPlugin extends Plugin {
                 call.reject("Must provide a browser id");
                 return;
             }
-            
+
             hidden = true;
-            
+
             WebView webView = WebviewOverlayPlugin.this.webviews.get(browser_uuid);
             if (webView != null) {
                 webView.setVisibility(View.INVISIBLE);
@@ -324,18 +326,18 @@ public class WebviewOverlayPlugin extends Plugin {
                 call.reject("Must provide a browser id");
                 return;
             }
-            
+
             JSObject dimensions_object = call.getObject("dimensions");
             if (dimensions_object == null) {
                 call.reject("Must pass dimensions object");
                 return;
             }
-            
+
             width = (int) getPixels(dimensions_object.getInteger("width", 1));
             height = (int) getPixels(dimensions_object.getInteger("height", 1));
             x = getPixels(dimensions_object.getInteger("x", 0));
             y = getPixels(dimensions_object.getInteger("y", 0));
-            
+
             WebView webView = WebviewOverlayPlugin.this.webviews.get(browser_uuid);
             if (webView == null) {
                 call.reject("Can't find browser matching id");
@@ -361,7 +363,7 @@ public class WebviewOverlayPlugin extends Plugin {
             if (hidden) {
                 WebviewOverlayPlugin.this.notify("updateSnapshot", new JSObject(), browser_uuid);
             }
-            
+
             call.resolve();
         });
     }
@@ -374,9 +376,9 @@ public class WebviewOverlayPlugin extends Plugin {
                 call.reject("Must provide a browser id");
                 return;
             }
-            
+
             WebView webView = WebviewOverlayPlugin.this.webviews.get(browser_uuid);
-            
+
             final JSObject object = new JSObject();
             if (webView != null) {
                 Bitmap bm = Bitmap.createBitmap(width == 0 ? 1 : width, height == 0 ? 1 : height, Bitmap.Config.ARGB_8888);
@@ -402,13 +404,13 @@ public class WebviewOverlayPlugin extends Plugin {
             call.reject("Must provide javascript string");
             return;
         }
-        
+
         String browser_uuid = call.getString("id");
         if (browser_uuid == null) {
             call.reject("Must provide a browser id");
             return;
         }
-        
+
         WebView webView = this.webviews.get(browser_uuid);
 
         if (webView != null) {
@@ -430,7 +432,7 @@ public class WebviewOverlayPlugin extends Plugin {
                 call.reject("Must provide a browser id");
                 return;
             }
-            
+
             WebView webView = WebviewOverlayPlugin.this.webviews.get(browser_uuid);
             if (webView != null) {
                 ViewGroup.LayoutParams params = webView.getLayoutParams();
@@ -451,7 +453,7 @@ public class WebviewOverlayPlugin extends Plugin {
                     fullscreen = true;
                 }
             }
-            
+
             call.resolve();
         });
     }
@@ -464,7 +466,7 @@ public class WebviewOverlayPlugin extends Plugin {
                 call.reject("Must provide a browser id");
                 return;
             }
-            
+
             WebView webView = WebviewOverlayPlugin.this.webviews.get(browser_uuid);
             if (webView != null) {
                 webView.goBack();
@@ -546,7 +548,7 @@ public class WebviewOverlayPlugin extends Plugin {
             call.resolve();
         });
     }
-    
+
     public void notify(String eventName, JSObject data, String browser_uuid) {
         data.put("id", browser_uuid);
         notifyListeners(eventName, data);
