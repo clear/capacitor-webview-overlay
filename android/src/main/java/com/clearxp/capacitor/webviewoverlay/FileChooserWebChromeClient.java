@@ -73,7 +73,7 @@ public class FileChooserWebChromeClient extends WebChromeClient {
     public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback, FileChooserParams fileChooserParams) {
         Log.d(TAG, "onShowFileChooser");
 
-        // If there's already a callback, cancel it to avoid issues.[3]
+        // If there's already a callback, cancel it to avoid issues.
         if (mFilePathCallback != null) {
             mFilePathCallback.onReceiveValue(null);
             mFilePathCallback = null;
@@ -138,6 +138,6 @@ public class FileChooserWebChromeClient extends WebChromeClient {
         chooserIntent.putExtra(Intent.EXTRA_INITIAL_INTENTS, intentArray);
 
         activity.startActivityForResult(chooserIntent, INPUT_FILE_REQUEST_CODE);
-        return true; // Return true to indicate we've handled the event.[4]
+        return true; // Return true to indicate we've handled the event.
     }
 }
