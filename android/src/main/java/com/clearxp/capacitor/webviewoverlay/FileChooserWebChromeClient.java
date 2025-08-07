@@ -1,6 +1,9 @@
 package com.clearxp.capacitor.webviewoverlay;
 
+import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
+import androidx.core.app.ActivityCompat;
 import android.content.Intent;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
@@ -28,6 +31,8 @@ public class FileChooserWebChromeClient extends WebChromeClient {
 
     private static final String TAG = "CxpFileChooserClient";
     public static final int INPUT_FILE_REQUEST_CODE = 1;
+    private static final int REQUEST_CAMERA_PERMISSION = 101;
+
 
     // NOTE: Using static fields is a simplification to bridge the Activity and the plugin.
     // This is a fragile approach and can cause issues if multiple WebViews are used
@@ -138,6 +143,26 @@ public class FileChooserWebChromeClient extends WebChromeClient {
         chooserIntent.putExtra(Intent.EXTRA_INITIAL_INTENTS, intentArray);
 
         activity.startActivityForResult(chooserIntent, INPUT_FILE_REQUEST_CODE);
+        this.requestCameraPermission();
+
         return true; // Return true to indicate we've handled the event.
+    }
+
+    private void requestCameraPermission() {
+        if (ActivityCompat.shouldShowRequestPermissionRationale(this.activity, Manifest.permission.CAMERA)) {
+            // Show an explanation to the user
+            new AlertDialog.Builder(this.activity)
+                    .setTitle("Permission Needed")
+                    .setMessage("This permission is needed to access the camera for taking pictures.")
+                    .setPositiveButton("OK", (dialog, which) -> {
+                        ActivityCompat.requestPermissions(this.activity, new String[]{Manifest.permission.CAMERA}, REQUEST_CAMERA_PERMISSION);
+                    })
+                    .setNegativeButton("Cancel", (dialog, which) -> dialog.dismiss())
+                    .create()
+                    .show();
+        } else {
+            // No explanation needed; request the permission
+            ActivityCompat.requestPermissions(this.activity, new String[]{Manifest.permission.CAMERA}, REQUEST_CAMERA_PERMISSION);
+        }
     }
 }
